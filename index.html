@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Localisateur de parcelle — recherche cadastrale</title>
+<title>Localisateur de bien — DPE + Cadastre</title>
 <style>
   :root{
     --bg:#0f1115;
@@ -14,6 +14,7 @@
     --muted:#9aa3b2;
     --accent:#4f8cff;
     --accent2:#3ecf8e;
+    --warn:#f5b942;
     --danger:#ff6b6b;
     --radius:14px;
   }
@@ -24,19 +25,12 @@
     background:var(--bg);
     color:var(--text);
     padding:20px 16px 60px;
-    max-width:640px;
+    max-width:680px;
     margin:0 auto;
   }
-  h1{
-    font-size:1.35rem;
-    margin:0 0 4px;
-  }
-  .subtitle{
-    color:var(--muted);
-    font-size:0.92rem;
-    margin-bottom:20px;
-    line-height:1.4;
-  }
+  h1{font-size:1.3rem;margin:0 0 4px;}
+  h2{font-size:1.02rem;margin:0 0 10px;display:flex;align-items:center;gap:8px;}
+  .subtitle{color:var(--muted);font-size:0.9rem;margin-bottom:18px;line-height:1.4;}
   .card{
     background:var(--panel);
     border:1px solid var(--border);
@@ -44,14 +38,9 @@
     padding:18px;
     margin-bottom:16px;
   }
-  label{
-    display:block;
-    font-size:0.85rem;
-    color:var(--muted);
-    margin:14px 0 6px;
-  }
+  label{display:block;font-size:0.82rem;color:var(--muted);margin:14px 0 6px;}
   label:first-of-type{margin-top:0;}
-  input[type="text"], input[type="number"]{
+  input[type="text"], input[type="number"], select{
     width:100%;
     background:var(--panel2);
     border:1px solid var(--border);
@@ -60,112 +49,72 @@
     border-radius:10px;
     font-size:1rem;
   }
-  input:focus{outline:2px solid var(--accent);}
-  .row{
-    display:flex;
-    gap:10px;
-  }
+  input:focus, select:focus{outline:2px solid var(--accent);}
+  .row{display:flex;gap:10px;}
   .row > div{flex:1;}
-  .autocomplete{
-    position:relative;
-  }
+  .autocomplete{position:relative;}
   .suggestions{
-    position:absolute;
-    top:100%;
-    left:0;right:0;
-    background:var(--panel2);
-    border:1px solid var(--border);
-    border-top:none;
-    border-radius:0 0 10px 10px;
-    max-height:220px;
-    overflow-y:auto;
-    z-index:10;
-    display:none;
+    position:absolute;top:100%;left:0;right:0;
+    background:var(--panel2);border:1px solid var(--border);border-top:none;
+    border-radius:0 0 10px 10px;max-height:220px;overflow-y:auto;z-index:10;display:none;
   }
-  .suggestions div{
-    padding:10px 14px;
-    font-size:0.92rem;
-    cursor:pointer;
-    border-bottom:1px solid var(--border);
-  }
+  .suggestions div{padding:10px 14px;font-size:0.92rem;cursor:pointer;border-bottom:1px solid var(--border);}
   .suggestions div:last-child{border-bottom:none;}
-  .suggestions div:active, .suggestions div.active{background:var(--accent);}
+  .suggestions div:active{background:var(--accent);}
+  .hint{font-size:0.76rem;color:var(--muted);margin-top:4px;}
   button{
-    width:100%;
-    padding:14px;
-    background:var(--accent);
-    color:white;
-    border:none;
-    border-radius:10px;
-    font-size:1rem;
-    font-weight:600;
-    margin-top:18px;
-    cursor:pointer;
+    width:100%;padding:14px;background:var(--accent);color:white;border:none;
+    border-radius:10px;font-size:1rem;font-weight:600;margin-top:20px;cursor:pointer;
   }
   button:disabled{opacity:0.5;}
-  .status{
-    font-size:0.88rem;
-    color:var(--muted);
-    margin-top:10px;
-    min-height:1.2em;
-  }
+  .status{font-size:0.88rem;color:var(--muted);margin-top:10px;min-height:1.2em;white-space:pre-line;}
   .status.error{color:var(--danger);}
-  .result-item{
-    background:var(--panel2);
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:14px;
-    margin-bottom:10px;
+  .section-title{
+    font-size:0.95rem;font-weight:600;margin:26px 0 12px;
+    display:flex;align-items:center;gap:8px;
   }
-  .result-item .main{
-    display:flex;
-    justify-content:space-between;
-    align-items:baseline;
-    margin-bottom:6px;
+  .section-title .count{
+    font-weight:400;font-size:0.8rem;color:var(--muted);
+  }
+  .result-item{
+    background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+    padding:14px;margin-bottom:10px;
+  }
+  .result-item .main{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px;}
+  .result-item .addr{font-weight:600;font-size:0.96rem;line-height:1.3;}
+  .result-item .score{
+    flex-shrink:0;background:var(--accent2);color:#08231a;font-weight:700;
+    font-size:0.78rem;padding:3px 9px;border-radius:20px;white-space:nowrap;
   }
   .result-item .idu{font-weight:600;font-size:0.95rem;}
-  .result-item .surface{color:var(--accent2);font-weight:600;font-size:0.95rem;}
-  .result-item .meta{color:var(--muted);font-size:0.82rem;margin-bottom:10px;}
+  .result-item .surface{color:var(--accent2);font-weight:600;font-size:0.92rem;}
+  .result-item .meta{color:var(--muted);font-size:0.8rem;margin-bottom:10px;line-height:1.5;}
   .links{display:flex;gap:8px;flex-wrap:wrap;}
   .links a{
-    font-size:0.82rem;
-    color:var(--accent);
-    text-decoration:none;
-    border:1px solid var(--accent);
-    padding:6px 10px;
-    border-radius:8px;
+    font-size:0.8rem;color:var(--accent);text-decoration:none;border:1px solid var(--accent);
+    padding:6px 10px;border-radius:8px;
   }
   .links a:active{background:var(--accent);color:white;}
-  .empty{
-    color:var(--muted);
-    font-size:0.9rem;
-    text-align:center;
-    padding:24px 10px;
-  }
-  details{
-    margin-top:6px;
-    font-size:0.85rem;
-    color:var(--muted);
-  }
+  .empty{color:var(--muted);font-size:0.9rem;text-align:center;padding:20px 10px;}
+  details{margin-top:6px;font-size:0.85rem;color:var(--muted);}
   summary{cursor:pointer;color:var(--accent);}
   details p{line-height:1.5;}
   .badge{
-    display:inline-block;
-    font-size:0.72rem;
-    padding:2px 8px;
-    border-radius:20px;
-    background:var(--panel2);
-    border:1px solid var(--border);
-    color:var(--muted);
-    margin-left:8px;
+    display:inline-block;font-size:0.72rem;padding:2px 8px;border-radius:20px;
+    background:var(--panel);border:1px solid var(--border);color:var(--muted);
+  }
+  .dpe-chip{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border-radius:5px;font-weight:700;font-size:0.75rem;color:#08231a;
   }
 </style>
 </head>
 <body>
 
-  <h1>🔎 Localisateur de parcelle</h1>
+  <h1>🔎 Localisateur de bien</h1>
   <div class="subtitle">
-    Recoupe une surface de terrain et une commune avec les données publiques du cadastre (IGN) pour retrouver les parcelles correspondantes.
+    Croise les caractéristiques d'une annonce (surface, DPE, année, type de bien, surface de terrain)
+    avec deux bases publiques officielles pour retrouver l'adresse la plus probable.
   </div>
 
   <div class="card">
@@ -175,39 +124,68 @@
       <div class="suggestions" id="suggestions"></div>
     </div>
 
+    <label for="surfaceHab">Surface habitable indiquée sur l'annonce (m²)</label>
+    <input type="number" id="surfaceHab" placeholder="ex : 480 (total si immeuble)" inputmode="numeric">
+    <div class="hint">Pour un immeuble de plusieurs lots, indique la surface totale si c'est ce que donne l'annonce — sinon laisse vide.</div>
+
     <div class="row">
       <div>
-        <label for="surface">Surface du terrain (m²)</label>
-        <input type="number" id="surface" placeholder="ex : 850" inputmode="numeric">
+        <label for="anneeConstr">Année de construction (approx.)</label>
+        <input type="number" id="anneeConstr" placeholder="ex : 1975" inputmode="numeric">
       </div>
       <div>
-        <label for="tolerance">Tolérance (%)</label>
-        <input type="number" id="tolerance" value="15" inputmode="numeric">
+        <label for="dpeClasse">Classe DPE</label>
+        <select id="dpeClasse">
+          <option value="">Peu importe</option>
+          <option>A</option><option>B</option><option>C</option>
+          <option>D</option><option>E</option><option>F</option><option>G</option>
+        </select>
       </div>
     </div>
 
-    <button id="searchBtn">Rechercher les parcelles</button>
+    <label for="nbLots">Nombre de lots / appartements (si immeuble)</label>
+    <input type="number" id="nbLots" placeholder="ex : 6" inputmode="numeric">
+    <div class="hint">Sert à repérer les adresses où plusieurs DPE similaires sont enregistrés (signe d'un immeuble à plusieurs lots).</div>
+
+    <label for="surfaceTerrain">Surface du terrain (m²) — recherche cadastre</label>
+    <input type="number" id="surfaceTerrain" placeholder="ex : 850" inputmode="numeric">
+
+    <label for="tolerance">Tolérance générale (%)</label>
+    <input type="number" id="tolerance" value="15" inputmode="numeric">
+
+    <button id="searchBtn">Rechercher</button>
     <div class="status" id="status"></div>
   </div>
 
-  <div id="results"></div>
+  <div id="dpeSectionTitle" style="display:none" class="section-title">
+    🏠 Adresses candidates (base DPE) <span class="count" id="dpeCount"></span>
+  </div>
+  <div id="dpeResults"></div>
+
+  <div id="cadastreSectionTitle" style="display:none" class="section-title">
+    📐 Parcelles candidates (cadastre) <span class="count" id="cadastreCount"></span>
+  </div>
+  <div id="cadastreResults"></div>
 
   <div class="card">
     <details>
       <summary>Comment ça marche / limites</summary>
       <p>
-        L'outil interroge l'<strong>API Carto Cadastre de l'IGN</strong> (données publiques et gratuites,
-        pas de scraping de Leboncoin ou d'un autre site d'annonces) pour lister les parcelles
-        d'une commune dont la surface (contenance officielle) est proche de celle que tu indiques.
+        <strong>Recherche DPE</strong> : interroge la base publique des Diagnostics de Performance
+        Énergétique (ADEME), qui contient pour chaque logement diagnostiqué depuis 2021 sa surface
+        habitable, son année de construction, sa classe énergie <strong>et son adresse déjà géolocalisée</strong>.
+        Les résultats sont regroupés par adresse : plusieurs DPE similaires à la même adresse
+        signalent souvent un immeuble à plusieurs lots.
       </p>
       <p>
-        Plus la surface est précise et la commune petite, plus le nombre de résultats sera réduit
-        et pertinent. Pour un immeuble avec plusieurs lots, la surface cadastrale correspond au
-        <strong>terrain</strong>, pas à la somme des surfaces habitables des appartements.
+        <strong>Recherche cadastre</strong> : interroge le registre public des parcelles (IGN) par
+        surface de terrain, en complément — utile si le bien n'a pas encore de DPE récent ou pour
+        confirmer visuellement une parcelle.
       </p>
       <p>
-        Les API publiques utilisées peuvent occasionnellement être lentes ou temporairement
-        indisponibles (maintenance côté IGN) — dans ce cas, réessaie quelques minutes après.
+        Limite importante : la base DPE ne couvre que les logements ayant eu un diagnostic établi
+        depuis juillet 2021. Un bien plus ancien sans DPE récent n'y apparaîtra pas — dans ce cas,
+        seule la recherche cadastre reste utile.
       </p>
     </details>
   </div>
@@ -217,9 +195,8 @@ const communeInput = document.getElementById('commune');
 const suggestionsBox = document.getElementById('suggestions');
 const searchBtn = document.getElementById('searchBtn');
 const statusEl = document.getElementById('status');
-const resultsEl = document.getElementById('results');
 
-let selectedCommune = null; // { nom, code, codeDept }
+let selectedCommune = null; // { nom, code, codeDept, codesPostaux }
 let debounceTimer = null;
 
 communeInput.addEventListener('input', () => {
@@ -242,9 +219,7 @@ async function fetchCommuneSuggestions(q) {
     if (!res.ok) throw new Error('geo api error');
     const data = await res.json();
     renderSuggestions(data);
-  } catch (err) {
-    suggestionsBox.style.display = 'none';
-  }
+  } catch (err) { suggestionsBox.style.display = 'none'; }
 }
 
 function renderSuggestions(list) {
@@ -255,7 +230,7 @@ function renderSuggestions(list) {
     const cp = (c.codesPostaux && c.codesPostaux[0]) ? c.codesPostaux[0] : '';
     div.textContent = `${c.nom} (${cp || c.codeDepartement})`;
     div.addEventListener('click', () => {
-      selectedCommune = { nom: c.nom, code: c.code, codeDept: c.codeDepartement };
+      selectedCommune = { nom: c.nom, code: c.code, codeDept: c.codeDepartement, codesPostaux: c.codesPostaux || [] };
       communeInput.value = c.nom;
       suggestionsBox.style.display = 'none';
     });
@@ -264,121 +239,269 @@ function renderSuggestions(list) {
   suggestionsBox.style.display = 'block';
 }
 
+async function resolveCommuneIfNeeded() {
+  if (selectedCommune) return true;
+  const q = communeInput.value.trim();
+  if (!q) return false;
+  try {
+    const res = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(q)}&fields=code,nom,codeDepartement,codesPostaux&boost=population&limit=1`);
+    const data = await res.json();
+    if (!data || data.length === 0) return false;
+    selectedCommune = { nom: data[0].nom, code: data[0].code, codeDept: data[0].codeDepartement, codesPostaux: data[0].codesPostaux || [] };
+    return true;
+  } catch (e) { return false; }
+}
+
+function normalize(str) {
+  return (str || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 searchBtn.addEventListener('click', runSearch);
 
 async function runSearch() {
-  resultsEl.innerHTML = '';
+  document.getElementById('dpeResults').innerHTML = '';
+  document.getElementById('cadastreResults').innerHTML = '';
+  document.getElementById('dpeSectionTitle').style.display = 'none';
+  document.getElementById('cadastreSectionTitle').style.display = 'none';
   statusEl.className = 'status';
-  const surfaceVal = parseFloat(document.getElementById('surface').value);
-  const tolVal = parseFloat(document.getElementById('tolerance').value) || 15;
+  statusEl.textContent = '';
 
-  if (!selectedCommune) {
-    // essaie de résoudre la commune tapée si pas sélectionnée via la liste
-    const q = communeInput.value.trim();
-    if (!q) { showError('Indique une commune.'); return; }
-    statusEl.textContent = 'Résolution de la commune…';
-    try {
-      const res = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(q)}&fields=code,nom,codeDepartement&boost=population&limit=1`);
-      const data = await res.json();
-      if (!data || data.length === 0) { showError("Commune introuvable, vérifie l'orthographe."); return; }
-      selectedCommune = { nom: data[0].nom, code: data[0].code, codeDept: data[0].codeDepartement };
-    } catch (err) {
-      showError('Impossible de joindre le service de recherche de commune.');
-      return;
-    }
+  const ok = await resolveCommuneIfNeeded();
+  if (!ok) { showError("Commune introuvable — vérifie l'orthographe."); return; }
+
+  const surfaceHab = parseFloat(document.getElementById('surfaceHab').value) || null;
+  const anneeConstr = parseInt(document.getElementById('anneeConstr').value) || null;
+  const dpeClasse = document.getElementById('dpeClasse').value || null;
+  const nbLots = parseInt(document.getElementById('nbLots').value) || null;
+  const surfaceTerrain = parseFloat(document.getElementById('surfaceTerrain').value) || null;
+  const tol = parseFloat(document.getElementById('tolerance').value) || 15;
+
+  if (!surfaceHab && !surfaceTerrain) {
+    showError('Indique au moins une surface (habitable ou terrain) pour lancer une recherche.');
+    return;
   }
-
-  if (!surfaceVal || surfaceVal <= 0) { showError('Indique une surface de terrain valide.'); return; }
 
   searchBtn.disabled = true;
-  statusEl.textContent = `Interrogation du cadastre pour ${selectedCommune.nom}…`;
+  let statusLines = [];
 
+  if (surfaceHab) {
+    statusLines.push('Interrogation de la base DPE (ADEME)…');
+    statusEl.textContent = statusLines.join('\n');
+    try {
+      const groups = await searchDPE(selectedCommune, surfaceHab, tol, anneeConstr, dpeClasse);
+      renderDpeResults(groups, surfaceHab, nbLots);
+      statusLines[statusLines.length - 1] = `Base DPE : ${groups.totalScanned} diagnostics analysés — ${groups.groups.length} adresse(s) candidate(s).`;
+    } catch (err) {
+      statusLines[statusLines.length - 1] = 'Base DPE : erreur — ' + err.message;
+    }
+    statusEl.textContent = statusLines.join('\n');
+  }
+
+  if (surfaceTerrain) {
+    statusLines.push('Interrogation du cadastre (IGN)…');
+    statusEl.textContent = statusLines.join('\n');
+    try {
+      const parcelles = await fetchAllParcelles(selectedCommune.code);
+      const min = surfaceTerrain * (1 - tol / 100);
+      const max = surfaceTerrain * (1 + tol / 100);
+      const matches = parcelles.filter(p => { const s = getParcelleSurface(p); return s !== null && s >= min && s <= max; });
+      matches.sort((a, b) => Math.abs(getParcelleSurface(a) - surfaceTerrain) - Math.abs(getParcelleSurface(b) - surfaceTerrain));
+      renderCadastreResults(matches, surfaceTerrain);
+      statusLines[statusLines.length - 1] = `Cadastre : ${parcelles.length} parcelles analysées — ${matches.length} correspondance(s).`;
+    } catch (err) {
+      statusLines[statusLines.length - 1] = 'Cadastre : erreur — ' + err.message;
+    }
+    statusEl.textContent = statusLines.join('\n');
+  }
+
+  searchBtn.disabled = false;
+}
+
+function showError(msg) { statusEl.textContent = msg; statusEl.className = 'status error'; }
+
+/* ---------------- DPE (ADEME) ---------------- */
+
+async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
+  const min = surfaceHab * (1 - tolPct / 100);
+  const max = surfaceHab * (1 + tolPct / 100);
+  const codesPostaux = commune.codesPostaux && commune.codesPostaux.length ? commune.codesPostaux : [null];
+
+  const fields = [
+    'Adresse_(BAN)','Nom__commune_(BAN)','Code_postal_(BAN)',
+    'Surface_habitable_logement','Annee_construction','Etiquette_DPE','Type_batiment','N°DPE'
+  ].join(',');
+
+  let allRows = [];
+  for (const cp of codesPostaux) {
+    let qs;
+    if (cp) {
+      qs = `Code_postal_\\(BAN\\):"${cp}" AND Surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
+    } else {
+      qs = `Surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
+    }
+    if (dpeClasse) qs += ` AND Etiquette_DPE:"${dpeClasse}"`;
+
+    const url = `https://data.ademe.fr/data-fair/api/v1/datasets/dpe-v2-logements-existants/lines?size=1000&select=${encodeURIComponent(fields)}&qs=${encodeURIComponent(qs)}`;
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/json' } });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data && data.results) allRows = allRows.concat(data.results);
+    } catch (e) { /* on continue avec les autres codes postaux */ }
+  }
+
+  // filtre client : commune exacte (accent/casse insensible) + année si fournie
+  const communeNorm = normalize(commune.nom);
+  let filtered = allRows.filter(r => {
+    const rCommune = normalize(r['Nom__commune_(BAN)']);
+    if (rCommune && communeNorm && !rCommune.includes(communeNorm) && !communeNorm.includes(rCommune)) return false;
+    if (anneeConstr && r['Annee_construction']) {
+      const diff = Math.abs(parseInt(r['Annee_construction']) - anneeConstr);
+      if (diff > 10) return false;
+    }
+    return true;
+  });
+
+  // regroupe par adresse
+  const groupMap = new Map();
+  filtered.forEach(r => {
+    const addr = r['Adresse_(BAN)'] || 'Adresse non renseignée';
+    const key = normalize(addr);
+    if (!groupMap.has(key)) {
+      groupMap.set(key, { adresse: addr, commune: r['Nom__commune_(BAN)'], rows: [] });
+    }
+    groupMap.get(key).rows.push(r);
+  });
+
+  let groups = Array.from(groupMap.values()).map(g => {
+    const surfaces = g.rows.map(r => parseFloat(r['Surface_habitable_logement'])).filter(n => !isNaN(n));
+    const avgSurface = surfaces.length ? surfaces.reduce((a, b) => a + b, 0) / surfaces.length : null;
+    const annees = g.rows.map(r => parseInt(r['Annee_construction'])).filter(n => !isNaN(n));
+    const anneeMode = annees.length ? annees[0] : null;
+    const classes = g.rows.map(r => r['Etiquette_DPE']).filter(Boolean);
+    return { ...g, count: g.rows.length, avgSurface, annee: anneeMode, classes: [...new Set(classes)] };
+  });
+
+  groups.sort((a, b) => Math.abs((b.count) - 1) - Math.abs((a.count) - 1)); // priorité aux adresses à plusieurs DPE
+  groups.sort((a, b) => (a.avgSurface !== null ? Math.abs(a.avgSurface - surfaceHab) : 1e9) - (b.avgSurface !== null ? Math.abs(b.avgSurface - surfaceHab) : 1e9));
+
+  return { groups, totalScanned: allRows.length };
+}
+
+async function geocodeAddress(addr, commune) {
   try {
-    const parcelles = await fetchAllParcelles(selectedCommune.code);
-    const min = surfaceVal * (1 - tolVal / 100);
-    const max = surfaceVal * (1 + tolVal / 100);
+    const q = `${addr} ${commune}`;
+    const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`);
+    const data = await res.json();
+    if (data.features && data.features[0]) {
+      const [lon, lat] = data.features[0].geometry.coordinates;
+      return { lon, lat };
+    }
+  } catch (e) {}
+  return null;
+}
 
-    const matches = parcelles.filter(p => {
-      const s = getSurface(p);
-      return s !== null && s >= min && s <= max;
+function dpeColor(letter) {
+  const colors = { A:'#2ecc71', B:'#7dd15a', C:'#c6dc4a', D:'#f5e642', E:'#f5b942', F:'#f0752e', G:'#e5442e' };
+  return colors[letter] || '#666';
+}
+
+async function renderDpeResults(result, targetSurface, nbLots) {
+  const titleEl = document.getElementById('dpeSectionTitle');
+  const countEl = document.getElementById('dpeCount');
+  const container = document.getElementById('dpeResults');
+  container.innerHTML = '';
+  titleEl.style.display = 'flex';
+  const groups = result.groups;
+  countEl.textContent = `(${groups.length})`;
+
+  if (groups.length === 0) {
+    container.innerHTML = '<div class="card"><div class="empty">Aucune adresse trouvée avec ces critères dans la base DPE. Essaie d\'élargir la tolérance ou vérifie la surface.</div></div>';
+    return;
+  }
+
+  const top = groups.slice(0, 25);
+  for (const g of top) {
+    const div = document.createElement('div');
+    div.className = 'result-item';
+    const lotMatch = nbLots && g.count === nbLots;
+    const surfaceTxt = g.avgSurface ? Math.round(g.avgSurface) + ' m² (moy.)' : '—';
+    const classesTxt = g.classes.length ? g.classes.map(c => `<span class="dpe-chip" style="background:${dpeColor(c)}">${c}</span>`).join(' ') : '';
+
+    div.innerHTML = `
+      <div class="main">
+        <span class="addr">${g.adresse}</span>
+        <span class="score">${g.count} DPE${lotMatch ? ' ✓' : ''}</span>
+      </div>
+      <div class="meta">
+        ${surfaceTxt}${g.annee ? ' · construit ~' + g.annee : ''} ${classesTxt}
+      </div>
+      <div class="links" data-addr="${encodeURIComponent(g.adresse)}"><span class="badge">Recherche de la position…</span></div>
+    `;
+    container.appendChild(div);
+
+    // géocode en arrière-plan pour ajouter les liens carte
+    geocodeAddress(g.adresse, g.commune || selectedCommune.nom).then(coords => {
+      const linksDiv = div.querySelector('.links');
+      if (coords) {
+        const gmaps = `https://www.google.com/maps?q=${coords.lat},${coords.lon}`;
+        const geoportail = `https://www.geoportail.gouv.fr/carte?c=${coords.lon},${coords.lat}&z=19`;
+        linksDiv.innerHTML = `<a href="${gmaps}" target="_blank" rel="noopener">Voir sur Google Maps</a><a href="${geoportail}" target="_blank" rel="noopener">Voir sur Géoportail</a>`;
+      } else {
+        linksDiv.innerHTML = `<a href="https://www.google.com/maps/search/${encodeURIComponent(g.adresse)}" target="_blank" rel="noopener">Chercher sur Google Maps</a>`;
+      }
     });
-
-    matches.sort((a, b) => Math.abs(getSurface(a) - surfaceVal) - Math.abs(getSurface(b) - surfaceVal));
-
-    renderResults(matches, surfaceVal);
-    statusEl.textContent = `${parcelles.length} parcelles analysées — ${matches.length} correspondance(s) trouvée(s).`;
-  } catch (err) {
-    showError("Erreur lors de l'appel au cadastre : " + err.message + ". Réessaie dans quelques instants.");
-  } finally {
-    searchBtn.disabled = false;
   }
 }
 
-function showError(msg) {
-  statusEl.textContent = msg;
-  statusEl.className = 'status error';
-}
+/* ---------------- Cadastre (IGN) ---------------- */
 
-function getSurface(feature) {
+function getParcelleSurface(feature) {
   const p = feature.properties || {};
   const raw = p.contenance ?? p.contenance_m2 ?? p.surface ?? p.surface_parcelle;
   const n = parseFloat(raw);
   return isNaN(n) ? null : n;
 }
 
-// Interroge l'API Carto Cadastre de l'IGN pour une commune, avec pagination,
-// et tente plusieurs formats de paramètres car la doc publique est peu stable.
 async function fetchAllParcelles(codeInsee) {
   const base = 'https://apicarto.ign.fr/api/cadastre/parcelle';
   const limit = 500;
   let start = 0;
   let all = [];
-  let paramStyle = null; // 'code_insee' ou 'code_dep_com'
+  let paramStyle = null;
 
   const codeDep = codeInsee.length === 5 ? codeInsee.substring(0, 2) : codeInsee.substring(0, 3);
   const codeCom = codeInsee.length === 5 ? codeInsee.substring(2) : codeInsee.substring(3);
 
   async function tryFetch(style, start) {
     let url;
-    if (style === 'code_insee') {
-      url = `${base}?code_insee=${codeInsee}&_limit=${limit}&_start=${start}`;
-    } else {
-      url = `${base}?code_dep=${codeDep}&code_com=${codeCom}&_limit=${limit}&_start=${start}`;
-    }
+    if (style === 'code_insee') url = `${base}?code_insee=${codeInsee}&_limit=${limit}&_start=${start}`;
+    else url = `${base}?code_dep=${codeDep}&code_com=${codeCom}&_limit=${limit}&_start=${start}`;
     const res = await fetch(url, { headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   }
 
-  // détermine quel style de paramètre fonctionne, une seule fois
-  if (!paramStyle) {
-    try {
-      const test = await tryFetch('code_insee', 0);
-      if (test && test.features) { paramStyle = 'code_insee'; all = all.concat(test.features); start = limit; }
-    } catch (e) { /* on tentera l'autre style ci-dessous */ }
-  }
+  try {
+    const test = await tryFetch('code_insee', 0);
+    if (test && test.features) { paramStyle = 'code_insee'; all = all.concat(test.features); start = limit; }
+  } catch (e) {}
   if (!paramStyle) {
     try {
       const test = await tryFetch('code_dep_com', 0);
       if (test && test.features) { paramStyle = 'code_dep_com'; all = all.concat(test.features); start = limit; }
-    } catch (e) {
-      throw new Error("le service cadastre n'a pas répondu au format attendu");
-    }
+    } catch (e) { throw new Error("le service cadastre n'a pas répondu"); }
   }
-  if (!paramStyle) throw new Error('aucune parcelle retournée par le service');
+  if (!paramStyle) throw new Error('aucune parcelle retournée');
 
-  // pagine jusqu'à épuisement (plafond de sécurité à 8000 parcelles)
   while (start < 8000) {
     let page;
-    try {
-      page = await tryFetch(paramStyle, start);
-    } catch (e) { break; }
+    try { page = await tryFetch(paramStyle, start); } catch (e) { break; }
     if (!page || !page.features || page.features.length === 0) break;
     all = all.concat(page.features);
     if (page.features.length < limit) break;
     start += limit;
   }
-
   return all;
 }
 
@@ -396,50 +519,51 @@ function centroidOf(feature) {
   } catch (e) { return null; }
 }
 
-function renderResults(matches, targetSurface) {
-  resultsEl.innerHTML = '';
+function renderCadastreResults(matches, targetSurface) {
+  const titleEl = document.getElementById('cadastreSectionTitle');
+  const countEl = document.getElementById('cadastreCount');
+  const container = document.getElementById('cadastreResults');
+  container.innerHTML = '';
+  titleEl.style.display = 'flex';
+  countEl.textContent = `(${matches.length})`;
+
   if (matches.length === 0) {
-    resultsEl.innerHTML = '<div class="card"><div class="empty">Aucune parcelle trouvée dans cette fourchette. Essaie d\'élargir la tolérance.</div></div>';
+    container.innerHTML = '<div class="card"><div class="empty">Aucune parcelle trouvée dans cette fourchette.</div></div>';
     return;
   }
-  matches.slice(0, 40).forEach(f => {
+
+  matches.slice(0, 30).forEach(f => {
     const p = f.properties || {};
-    const surface = getSurface(f);
+    const surface = getParcelleSurface(f);
     const c = centroidOf(f);
     const div = document.createElement('div');
     div.className = 'result-item';
 
     let linksHtml = '';
     if (c) {
-      const geoportailUrl = `https://www.geoportail.gouv.fr/carte?c=${c.lon},${c.lat}&z=19&l0=CADASTRALPARCELS.PARCELS::GEOPORTAIL:OGC:WMTS(1)&l1=ORTHOIMAGERY.ORTHOPHOTOS::GEOPORTAIL:OGC:WMTS(1)`;
+      const geoportailUrl = `https://www.geoportail.gouv.fr/carte?c=${c.lon},${c.lat}&z=19`;
       const gmapsUrl = `https://www.google.com/maps?q=${c.lat},${c.lon}`;
-      linksHtml = `<div class="links">
-        <a href="${geoportailUrl}" target="_blank" rel="noopener">Voir sur Géoportail</a>
-        <a href="${gmapsUrl}" target="_blank" rel="noopener">Voir sur Google Maps</a>
-      </div>`;
+      linksHtml = `<div class="links"><a href="${geoportailUrl}" target="_blank" rel="noopener">Voir sur Géoportail</a><a href="${gmapsUrl}" target="_blank" rel="noopener">Voir sur Google Maps</a></div>`;
     } else {
-      linksHtml = `<div class="links"><span class="badge">Localisation précise indisponible pour cette parcelle</span></div>`;
+      linksHtml = `<div class="links"><span class="badge">Localisation indisponible</span></div>`;
     }
 
     const idu = `Section ${p.section || '?'} n°${p.numero || '?'}`;
     const diff = surface ? Math.round(Math.abs(surface - targetSurface)) : '?';
 
     div.innerHTML = `
-      <div class="main">
-        <span class="idu">${idu}</span>
-        <span class="surface">${surface ? surface + ' m²' : '—'}</span>
-      </div>
-      <div class="meta">Écart avec la surface indiquée : ${diff} m² · Feuille ${p.feuille || '?'}</div>
+      <div class="main"><span class="idu">${idu}</span><span class="surface">${surface ? surface + ' m²' : '—'}</span></div>
+      <div class="meta">Écart : ${diff} m² · Feuille ${p.feuille || '?'}</div>
       ${linksHtml}
     `;
-    resultsEl.appendChild(div);
+    container.appendChild(div);
   });
 
-  if (matches.length > 40) {
+  if (matches.length > 30) {
     const more = document.createElement('div');
     more.className = 'status';
-    more.textContent = `+ ${matches.length - 40} autres résultats non affichés — réduis la tolérance pour affiner.`;
-    resultsEl.appendChild(more);
+    more.textContent = `+ ${matches.length - 30} autres résultats non affichés.`;
+    container.appendChild(more);
   }
 }
 </script>
