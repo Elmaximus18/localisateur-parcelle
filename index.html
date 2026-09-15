@@ -128,6 +128,15 @@
     <input type="number" id="surfaceHab" placeholder="ex : 480 (total si immeuble)" inputmode="numeric">
     <div class="hint">Pour un immeuble de plusieurs lots, indique la surface totale si c'est ce que donne l'annonce — sinon laisse vide.</div>
 
+    <label for="typeBien">Type de bien</label>
+    <select id="typeBien">
+      <option value="">Non précisé</option>
+      <option value="maison">Maison</option>
+      <option value="appartement">Appartement</option>
+      <option value="studio">Studio</option>
+      <option value="immeuble">Immeuble (plusieurs lots)</option>
+    </select>
+
     <div class="row">
       <div>
         <label for="anneeConstr">Année de construction (approx.)</label>
@@ -143,9 +152,24 @@
       </div>
     </div>
 
-    <label for="nbLots">Nombre de lots / appartements (si immeuble)</label>
-    <input type="number" id="nbLots" placeholder="ex : 6" inputmode="numeric">
-    <div class="hint">Sert à repérer les adresses où plusieurs DPE similaires sont enregistrés (signe d'un immeuble à plusieurs lots).</div>
+    <label for="gesClasse">Classe GES (émissions gaz à effet de serre)</label>
+    <select id="gesClasse">
+      <option value="">Peu importe</option>
+      <option>A</option><option>B</option><option>C</option>
+      <option>D</option><option>E</option><option>F</option><option>G</option>
+    </select>
+
+    <div id="champLots">
+      <label for="nbLots">Nombre de lots / appartements</label>
+      <input type="number" id="nbLots" placeholder="ex : 6" inputmode="numeric">
+      <div class="hint">Sert à repérer les adresses où plusieurs DPE similaires sont enregistrés (signe d'un immeuble à plusieurs lots).</div>
+    </div>
+
+    <div id="champPieces" style="display:none">
+      <label for="nbPieces">Nombre de pièces</label>
+      <input type="number" id="nbPieces" placeholder="ex : 4" inputmode="numeric">
+      <div class="hint">Affiné pour une maison, un appartement ou un studio — réduit fortement le nombre de résultats quand l'info est disponible dans le DPE.</div>
+    </div>
 
     <label for="surfaceTerrain">Surface du terrain (m²) — recherche cadastre</label>
     <input type="number" id="surfaceTerrain" placeholder="ex : 850" inputmode="numeric">
@@ -198,6 +222,22 @@ const statusEl = document.getElementById('status');
 
 let selectedCommune = null; // { nom, code, codeDept, codesPostaux }
 let debounceTimer = null;
+
+const typeBienSelect = document.getElementById('typeBien');
+const champLots = document.getElementById('champLots');
+const champPieces = document.getElementById('champPieces');
+function updateTypeBienFields() {
+  const v = typeBienSelect.value;
+  if (v === 'maison' || v === 'appartement' || v === 'studio') {
+    champLots.style.display = 'none';
+    champPieces.style.display = 'block';
+  } else {
+    champLots.style.display = 'block';
+    champPieces.style.display = 'none';
+  }
+}
+typeBienSelect.addEventListener('change', updateTypeBienFields);
+updateTypeBienFields();
 
 communeInput.addEventListener('input', () => {
   selectedCommune = null;
@@ -272,7 +312,10 @@ async function runSearch() {
   const surfaceHab = parseFloat(document.getElementById('surfaceHab').value) || null;
   const anneeConstr = parseInt(document.getElementById('anneeConstr').value) || null;
   const dpeClasse = document.getElementById('dpeClasse').value || null;
+  const gesClasse = document.getElementById('gesClasse').value || null;
+  const typeBien = document.getElementById('typeBien').value || null;
   const nbLots = parseInt(document.getElementById('nbLots').value) || null;
+  const nbPieces = parseInt(document.getElementById('nbPieces').value) || null;
   const surfaceTerrain = parseFloat(document.getElementById('surfaceTerrain').value) || null;
   const tol = parseFloat(document.getElementById('tolerance').value) || 15;
 
@@ -288,8 +331,8 @@ async function runSearch() {
     statusLines.push('Interrogation de la base DPE (ADEME)…');
     statusEl.textContent = statusLines.join('\n');
     try {
-      const groups = await searchDPE(selectedCommune, surfaceHab, tol, anneeConstr, dpeClasse);
-      renderDpeResults(groups, surfaceHab, nbLots);
+      const groups = await searchDPE(selectedCommune, surfaceHab, tol, anneeConstr, dpeClasse, gesClasse, typeBien, nbPieces);
+      renderDpeResults(groups, surfaceHab, nbLots, nbPieces);
       statusLines[statusLines.length - 1] = `Base DPE : ${groups.totalScanned} diagnostics analysés — ${groups.groups.length} adresse(s) candidate(s).`;
     } catch (err) {
       statusLines[statusLines.length - 1] = 'Base DPE : erreur — ' + err.message;
@@ -331,7 +374,7 @@ function getField(row, ...keys) {
   return null;
 }
 
-async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
+async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse, gesClasse, typeBien, nbPieces) {
   const min = surfaceHab * (1 - tolPct / 100);
   const max = surfaceHab * (1 + tolPct / 100);
   const codesPostaux = commune.codesPostaux && commune.codesPostaux.length ? commune.codesPostaux : [null];
@@ -342,6 +385,7 @@ async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
     let qs = `surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
     if (cp) qs += ` AND code_postal_ban:"${cp}"`;
     if (dpeClasse) qs += ` AND etiquette_dpe:"${dpeClasse}"`;
+    if (gesClasse) qs += ` AND etiquette_ges:"${gesClasse}"`;
 
     const url = `https://data.ademe.fr/data-fair/api/v1/datasets/${DATASET}/lines?size=1000&qs=${encodeURIComponent(qs)}`;
     try {
@@ -351,23 +395,46 @@ async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
         if (data && data.results) allRows = allRows.concat(data.results);
       } else if (cp) {
         // repli : sans le filtre code postal, au cas où la clé de champ diffère
-        const url2 = `https://data.ademe.fr/data-fair/api/v1/datasets/${DATASET}/lines?size=1000&qs=${encodeURIComponent('surface_habitable_logement:[' + Math.max(0, Math.floor(min)) + ' TO ' + Math.ceil(max) + ']')}`;
+        let qsFallback = `surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
+        if (dpeClasse) qsFallback += ` AND etiquette_dpe:"${dpeClasse}"`;
+        if (gesClasse) qsFallback += ` AND etiquette_ges:"${gesClasse}"`;
+        const url2 = `https://data.ademe.fr/data-fair/api/v1/datasets/${DATASET}/lines?size=1000&qs=${encodeURIComponent(qsFallback)}`;
         const res2 = await fetch(url2, { headers: { accept: 'application/json' } });
         if (res2.ok) { const d2 = await res2.json(); if (d2 && d2.results) allRows = allRows.concat(d2.results); }
       }
     } catch (e) { /* on continue avec les autres codes postaux */ }
   }
 
-  // filtre client : commune exacte (accent/casse insensible) + année si fournie
+  // filtre client : commune exacte (accent/casse insensible) + année + type de bien + pièces si fournis
   const communeNorm = normalize(commune.nom);
   let filtered = allRows.filter(r => {
     const rCommune = normalize(getField(r, 'nom_commune_ban', 'Nom__commune_(BAN)', 'Nom_commune_(BAN)'));
     if (rCommune && communeNorm && !rCommune.includes(communeNorm) && !communeNorm.includes(rCommune)) return false;
+
     const annee = getField(r, 'annee_construction', 'Annee_construction');
     if (anneeConstr && annee) {
       const diff = Math.abs(parseInt(annee) - anneeConstr);
       if (diff > 10) return false;
     }
+
+    if (typeBien) {
+      const tb = normalize(getField(r, 'type_batiment', 'Type_batiment'));
+      if (tb) {
+        if (typeBien === 'maison' && !tb.includes('maison')) return false;
+        if ((typeBien === 'appartement' || typeBien === 'studio' || typeBien === 'immeuble') && !tb.includes('appartement')) return false;
+      }
+      // si le champ type_batiment est absent de la ligne, on ne filtre pas dessus (donnée manquante ≠ non-correspondance)
+    }
+
+    if (nbPieces) {
+      const pieces = getField(r, 'nombre_pieces_principales', 'nombre_piece_principale', 'nombre_niveau_logement');
+      if (pieces !== null) {
+        const p = parseInt(pieces);
+        if (!isNaN(p) && Math.abs(p - nbPieces) > 1) return false;
+      }
+      // si le champ n'existe pas dans les données, on n'exclut pas le résultat pour autant
+    }
+
     return true;
   });
 
@@ -388,10 +455,11 @@ async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
     const annees = g.rows.map(r => parseInt(getField(r, 'annee_construction', 'Annee_construction'))).filter(n => !isNaN(n));
     const anneeMode = annees.length ? annees[0] : null;
     const classes = g.rows.map(r => getField(r, 'etiquette_dpe', 'Etiquette_DPE')).filter(Boolean);
-    return { ...g, count: g.rows.length, avgSurface, annee: anneeMode, classes: [...new Set(classes)] };
+    const gesClasses = g.rows.map(r => getField(r, 'etiquette_ges', 'Etiquette_GES')).filter(Boolean);
+    const pieces = g.rows.map(r => parseInt(getField(r, 'nombre_pieces_principales', 'nombre_piece_principale', 'nombre_niveau_logement'))).filter(n => !isNaN(n));
+    return { ...g, count: g.rows.length, avgSurface, annee: anneeMode, classes: [...new Set(classes)], gesClasses: [...new Set(gesClasses)], pieces: pieces.length ? pieces : null };
   });
 
-  groups.sort((a, b) => Math.abs((b.count) - 1) - Math.abs((a.count) - 1)); // priorité aux adresses à plusieurs DPE
   groups.sort((a, b) => (a.avgSurface !== null ? Math.abs(a.avgSurface - surfaceHab) : 1e9) - (b.avgSurface !== null ? Math.abs(b.avgSurface - surfaceHab) : 1e9));
 
   return { groups, totalScanned: allRows.length };
@@ -415,7 +483,7 @@ function dpeColor(letter) {
   return colors[letter] || '#666';
 }
 
-async function renderDpeResults(result, targetSurface, nbLots) {
+async function renderDpeResults(result, targetSurface, nbLots, nbPieces) {
   const titleEl = document.getElementById('dpeSectionTitle');
   const countEl = document.getElementById('dpeCount');
   const container = document.getElementById('dpeResults');
@@ -429,13 +497,25 @@ async function renderDpeResults(result, targetSurface, nbLots) {
     return;
   }
 
-  const top = groups.slice(0, 25);
+  // boost des adresses qui correspondent au nb de lots (immeuble) ou au nb de pièces (maison/appart/studio)
+  const scored = groups.map(g => {
+    let score = 0;
+    if (nbLots && g.count === nbLots) score -= 1000;
+    if (nbPieces && g.pieces && g.pieces.some(p => Math.abs(p - nbPieces) <= 1)) score -= 500;
+    return { g, score };
+  });
+  scored.sort((a, b) => a.score - b.score);
+  const orderedGroups = scored.map(s => s.g);
+  const top = orderedGroups.slice(0, 25);
   for (const g of top) {
     const div = document.createElement('div');
     div.className = 'result-item';
     const lotMatch = nbLots && g.count === nbLots;
     const surfaceTxt = g.avgSurface ? Math.round(g.avgSurface) + ' m² (moy.)' : '—';
-    const classesTxt = g.classes.length ? g.classes.map(c => `<span class="dpe-chip" style="background:${dpeColor(c)}">${c}</span>`).join(' ') : '';
+    const classesTxt = g.classes.length ? g.classes.map(c => `<span class="dpe-chip" title="DPE" style="background:${dpeColor(c)}">${c}</span>`).join(' ') : '';
+    const gesTxt = g.gesClasses && g.gesClasses.length ? ' GES:' + g.gesClasses.map(c => `<span class="dpe-chip" title="GES" style="background:${dpeColor(c)}">${c}</span>`).join(' ') : '';
+    const piecesMatch = nbPieces && g.pieces && g.pieces.some(p => Math.abs(p - nbPieces) <= 1);
+    const piecesTxt = g.pieces ? ` · ${Math.round(g.pieces.reduce((a,b)=>a+b,0)/g.pieces.length)} pièce(s)${piecesMatch ? ' ✓' : ''}` : '';
 
     div.innerHTML = `
       <div class="main">
@@ -443,7 +523,7 @@ async function renderDpeResults(result, targetSurface, nbLots) {
         <span class="score">${g.count} DPE${lotMatch ? ' ✓' : ''}</span>
       </div>
       <div class="meta">
-        ${surfaceTxt}${g.annee ? ' · construit ~' + g.annee : ''} ${classesTxt}
+        ${surfaceTxt}${g.annee ? ' · construit ~' + g.annee : ''}${piecesTxt} ${classesTxt}${gesTxt}
       </div>
       <div class="links" data-addr="${encodeURIComponent(g.adresse)}"><span class="badge">Recherche de la position…</span></div>
     `;
