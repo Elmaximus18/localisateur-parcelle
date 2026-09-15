@@ -321,42 +321,51 @@ function showError(msg) { statusEl.textContent = msg; statusEl.className = 'stat
 
 /* ---------------- DPE (ADEME) ---------------- */
 
+// L'API data-fair de l'ADEME normalise ses clés de champ en snake_case minuscule
+// (confirmé via une intégration tierce documentée) — mais on lit aussi les variantes
+// à casse capitalisée par prudence, au cas où le schéma évoluerait.
+function getField(row, ...keys) {
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+  }
+  return null;
+}
+
 async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
   const min = surfaceHab * (1 - tolPct / 100);
   const max = surfaceHab * (1 + tolPct / 100);
   const codesPostaux = commune.codesPostaux && commune.codesPostaux.length ? commune.codesPostaux : [null];
-
-  const fields = [
-    'Adresse_(BAN)','Nom__commune_(BAN)','Code_postal_(BAN)',
-    'Surface_habitable_logement','Annee_construction','Etiquette_DPE','Type_batiment','N°DPE'
-  ].join(',');
+  const DATASET = 'dpe03existant';
 
   let allRows = [];
   for (const cp of codesPostaux) {
-    let qs;
-    if (cp) {
-      qs = `Code_postal_\\(BAN\\):"${cp}" AND Surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
-    } else {
-      qs = `Surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
-    }
-    if (dpeClasse) qs += ` AND Etiquette_DPE:"${dpeClasse}"`;
+    let qs = `surface_habitable_logement:[${Math.max(0, Math.floor(min))} TO ${Math.ceil(max)}]`;
+    if (cp) qs += ` AND code_postal_ban:"${cp}"`;
+    if (dpeClasse) qs += ` AND etiquette_dpe:"${dpeClasse}"`;
 
-    const url = `https://data.ademe.fr/data-fair/api/v1/datasets/dpe-v2-logements-existants/lines?size=1000&select=${encodeURIComponent(fields)}&qs=${encodeURIComponent(qs)}`;
+    const url = `https://data.ademe.fr/data-fair/api/v1/datasets/${DATASET}/lines?size=1000&qs=${encodeURIComponent(qs)}`;
     try {
       const res = await fetch(url, { headers: { accept: 'application/json' } });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (data && data.results) allRows = allRows.concat(data.results);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.results) allRows = allRows.concat(data.results);
+      } else if (cp) {
+        // repli : sans le filtre code postal, au cas où la clé de champ diffère
+        const url2 = `https://data.ademe.fr/data-fair/api/v1/datasets/${DATASET}/lines?size=1000&qs=${encodeURIComponent('surface_habitable_logement:[' + Math.max(0, Math.floor(min)) + ' TO ' + Math.ceil(max) + ']')}`;
+        const res2 = await fetch(url2, { headers: { accept: 'application/json' } });
+        if (res2.ok) { const d2 = await res2.json(); if (d2 && d2.results) allRows = allRows.concat(d2.results); }
+      }
     } catch (e) { /* on continue avec les autres codes postaux */ }
   }
 
   // filtre client : commune exacte (accent/casse insensible) + année si fournie
   const communeNorm = normalize(commune.nom);
   let filtered = allRows.filter(r => {
-    const rCommune = normalize(r['Nom__commune_(BAN)']);
+    const rCommune = normalize(getField(r, 'nom_commune_ban', 'Nom__commune_(BAN)', 'Nom_commune_(BAN)'));
     if (rCommune && communeNorm && !rCommune.includes(communeNorm) && !communeNorm.includes(rCommune)) return false;
-    if (anneeConstr && r['Annee_construction']) {
-      const diff = Math.abs(parseInt(r['Annee_construction']) - anneeConstr);
+    const annee = getField(r, 'annee_construction', 'Annee_construction');
+    if (anneeConstr && annee) {
+      const diff = Math.abs(parseInt(annee) - anneeConstr);
       if (diff > 10) return false;
     }
     return true;
@@ -365,20 +374,20 @@ async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse) {
   // regroupe par adresse
   const groupMap = new Map();
   filtered.forEach(r => {
-    const addr = r['Adresse_(BAN)'] || 'Adresse non renseignée';
+    const addr = getField(r, 'adresse_ban', 'Adresse_(BAN)', 'adresse_brut') || 'Adresse non renseignée';
     const key = normalize(addr);
     if (!groupMap.has(key)) {
-      groupMap.set(key, { adresse: addr, commune: r['Nom__commune_(BAN)'], rows: [] });
+      groupMap.set(key, { adresse: addr, commune: getField(r, 'nom_commune_ban', 'Nom__commune_(BAN)'), rows: [] });
     }
     groupMap.get(key).rows.push(r);
   });
 
   let groups = Array.from(groupMap.values()).map(g => {
-    const surfaces = g.rows.map(r => parseFloat(r['Surface_habitable_logement'])).filter(n => !isNaN(n));
+    const surfaces = g.rows.map(r => parseFloat(getField(r, 'surface_habitable_logement', 'Surface_habitable_logement'))).filter(n => !isNaN(n));
     const avgSurface = surfaces.length ? surfaces.reduce((a, b) => a + b, 0) / surfaces.length : null;
-    const annees = g.rows.map(r => parseInt(r['Annee_construction'])).filter(n => !isNaN(n));
+    const annees = g.rows.map(r => parseInt(getField(r, 'annee_construction', 'Annee_construction'))).filter(n => !isNaN(n));
     const anneeMode = annees.length ? annees[0] : null;
-    const classes = g.rows.map(r => r['Etiquette_DPE']).filter(Boolean);
+    const classes = g.rows.map(r => getField(r, 'etiquette_dpe', 'Etiquette_DPE')).filter(Boolean);
     return { ...g, count: g.rows.length, avgSurface, annee: anneeMode, classes: [...new Set(classes)] };
   });
 
