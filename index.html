@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Localisateur de parcelle — recherche cadastrale</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --panel:#171a21;
+    --panel2:#1e222b;
+    --border:#2a2f3a;
+    --text:#eef1f6;
+    --muted:#9aa3b2;
+    --accent:#4f8cff;
+    --accent2:#3ecf8e;
+    --danger:#ff6b6b;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    padding:20px 16px 60px;
+    max-width:640px;
+    margin:0 auto;
+  }
+  h1{
+    font-size:1.35rem;
+    margin:0 0 4px;
+  }
+  .subtitle{
+    color:var(--muted);
+    font-size:0.92rem;
+    margin-bottom:20px;
+    line-height:1.4;
+  }
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px;
+    margin-bottom:16px;
+  }
+  label{
+    display:block;
+    font-size:0.85rem;
+    color:var(--muted);
+    margin:14px 0 6px;
+  }
+  label:first-of-type{margin-top:0;}
+  input[type="text"], input[type="number"]{
+    width:100%;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:12px 14px;
+    border-radius:10px;
+    font-size:1rem;
+  }
+  input:focus{outline:2px solid var(--accent);}
+  .row{
+    display:flex;
+    gap:10px;
+  }
+  .row > div{flex:1;}
+  .autocomplete{
+    position:relative;
+  }
+  .suggestions{
+    position:absolute;
+    top:100%;
+    left:0;right:0;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-top:none;
+    border-radius:0 0 10px 10px;
+    max-height:220px;
+    overflow-y:auto;
+    z-index:10;
+    display:none;
+  }
+  .suggestions div{
+    padding:10px 14px;
+    font-size:0.92rem;
+    cursor:pointer;
+    border-bottom:1px solid var(--border);
+  }
+  .suggestions div:last-child{border-bottom:none;}
+  .suggestions div:active, .suggestions div.active{background:var(--accent);}
+  button{
+    width:100%;
+    padding:14px;
+    background:var(--accent);
+    color:white;
+    border:none;
+    border-radius:10px;
+    font-size:1rem;
+    font-weight:600;
+    margin-top:18px;
+    cursor:pointer;
+  }
+  button:disabled{opacity:0.5;}
+  .status{
+    font-size:0.88rem;
+    color:var(--muted);
+    margin-top:10px;
+    min-height:1.2em;
+  }
+  .status.error{color:var(--danger);}
+  .result-item{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:10px;
+  }
+  .result-item .main{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:6px;
+  }
+  .result-item .idu{font-weight:600;font-size:0.95rem;}
+  .result-item .surface{color:var(--accent2);font-weight:600;font-size:0.95rem;}
+  .result-item .meta{color:var(--muted);font-size:0.82rem;margin-bottom:10px;}
+  .links{display:flex;gap:8px;flex-wrap:wrap;}
+  .links a{
+    font-size:0.82rem;
+    color:var(--accent);
+    text-decoration:none;
+    border:1px solid var(--accent);
+    padding:6px 10px;
+    border-radius:8px;
+  }
+  .links a:active{background:var(--accent);color:white;}
+  .empty{
+    color:var(--muted);
+    font-size:0.9rem;
+    text-align:center;
+    padding:24px 10px;
+  }
+  details{
+    margin-top:6px;
+    font-size:0.85rem;
+    color:var(--muted);
+  }
+  summary{cursor:pointer;color:var(--accent);}
+  details p{line-height:1.5;}
+  .badge{
+    display:inline-block;
+    font-size:0.72rem;
+    padding:2px 8px;
+    border-radius:20px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    color:var(--muted);
+    margin-left:8px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🔎 Localisateur de parcelle</h1>
+  <div class="subtitle">
+    Recoupe une surface de terrain et une commune avec les données publiques du cadastre (IGN) pour retrouver les parcelles correspondantes.
+  </div>
+
+  <div class="card">
+    <label for="commune">Commune</label>
+    <div class="autocomplete">
+      <input type="text" id="commune" placeholder="ex : Sorède" autocomplete="off">
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="surface">Surface du terrain (m²)</label>
+        <input type="number" id="surface" placeholder="ex : 850" inputmode="numeric">
+      </div>
+      <div>
+        <label for="tolerance">Tolérance (%)</label>
+        <input type="number" id="tolerance" value="15" inputmode="numeric">
+      </div>
+    </div>
+
+    <button id="searchBtn">Rechercher les parcelles</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div id="results"></div>
+
+  <div class="card">
+    <details>
+      <summary>Comment ça marche / limites</summary>
+      <p>
+        L'outil interroge l'<strong>API Carto Cadastre de l'IGN</strong> (données publiques et gratuites,
+        pas de scraping de Leboncoin ou d'un autre site d'annonces) pour lister les parcelles
+        d'une commune dont la surface (contenance officielle) est proche de celle que tu indiques.
+      </p>
+      <p>
+        Plus la surface est précise et la commune petite, plus le nombre de résultats sera réduit
+        et pertinent. Pour un immeuble avec plusieurs lots, la surface cadastrale correspond au
+        <strong>terrain</strong>, pas à la somme des surfaces habitables des appartements.
+      </p>
+      <p>
+        Les API publiques utilisées peuvent occasionnellement être lentes ou temporairement
+        indisponibles (maintenance côté IGN) — dans ce cas, réessaie quelques minutes après.
+      </p>
+    </details>
+  </div>
+
+<script>
+const communeInput = document.getElementById('commune');
+const suggestionsBox = document.getElementById('suggestions');
+const searchBtn = document.getElementById('searchBtn');
+const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+
+let selectedCommune = null; // { nom, code, codeDept }
+let debounceTimer = null;
+
+communeInput.addEventListener('input', () => {
+  selectedCommune = null;
+  const q = communeInput.value.trim();
+  clearTimeout(debounceTimer);
+  if (q.length < 2) { suggestionsBox.style.display = 'none'; return; }
+  debounceTimer = setTimeout(() => fetchCommuneSuggestions(q), 300);
+});
+
+document.addEventListener('click', (e) => {
+  if (!suggestionsBox.contains(e.target) && e.target !== communeInput) {
+    suggestionsBox.style.display = 'none';
+  }
+});
+
+async function fetchCommuneSuggestions(q) {
+  try {
+    const res = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(q)}&fields=code,nom,codeDepartement,codesPostaux&boost=population&limit=8`);
+    if (!res.ok) throw new Error('geo api error');
+    const data = await res.json();
+    renderSuggestions(data);
+  } catch (err) {
+    suggestionsBox.style.display = 'none';
+  }
+}
+
+function renderSuggestions(list) {
+  if (!list || list.length === 0) { suggestionsBox.style.display = 'none'; return; }
+  suggestionsBox.innerHTML = '';
+  list.forEach(c => {
+    const div = document.createElement('div');
+    const cp = (c.codesPostaux && c.codesPostaux[0]) ? c.codesPostaux[0] : '';
+    div.textContent = `${c.nom} (${cp || c.codeDepartement})`;
+    div.addEventListener('click', () => {
+      selectedCommune = { nom: c.nom, code: c.code, codeDept: c.codeDepartement };
+      communeInput.value = c.nom;
+      suggestionsBox.style.display = 'none';
+    });
+    suggestionsBox.appendChild(div);
+  });
+  suggestionsBox.style.display = 'block';
+}
+
+searchBtn.addEventListener('click', runSearch);
+
+async function runSearch() {
+  resultsEl.innerHTML = '';
+  statusEl.className = 'status';
+  const surfaceVal = parseFloat(document.getElementById('surface').value);
+  const tolVal = parseFloat(document.getElementById('tolerance').value) || 15;
+
+  if (!selectedCommune) {
+    // essaie de résoudre la commune tapée si pas sélectionnée via la liste
+    const q = communeInput.value.trim();
+    if (!q) { showError('Indique une commune.'); return; }
+    statusEl.textContent = 'Résolution de la commune…';
+    try {
+      const res = await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(q)}&fields=code,nom,codeDepartement&boost=population&limit=1`);
+      const data = await res.json();
+      if (!data || data.length === 0) { showError("Commune introuvable, vérifie l'orthographe."); return; }
+      selectedCommune = { nom: data[0].nom, code: data[0].code, codeDept: data[0].codeDepartement };
+    } catch (err) {
+      showError('Impossible de joindre le service de recherche de commune.');
+      return;
+    }
+  }
+
+  if (!surfaceVal || surfaceVal <= 0) { showError('Indique une surface de terrain valide.'); return; }
+
+  searchBtn.disabled = true;
+  statusEl.textContent = `Interrogation du cadastre pour ${selectedCommune.nom}…`;
+
+  try {
+    const parcelles = await fetchAllParcelles(selectedCommune.code);
+    const min = surfaceVal * (1 - tolVal / 100);
+    const max = surfaceVal * (1 + tolVal / 100);
+
+    const matches = parcelles.filter(p => {
+      const s = getSurface(p);
+      return s !== null && s >= min && s <= max;
+    });
+
+    matches.sort((a, b) => Math.abs(getSurface(a) - surfaceVal) - Math.abs(getSurface(b) - surfaceVal));
+
+    renderResults(matches, surfaceVal);
+    statusEl.textContent = `${parcelles.length} parcelles analysées — ${matches.length} correspondance(s) trouvée(s).`;
+  } catch (err) {
+    showError("Erreur lors de l'appel au cadastre : " + err.message + ". Réessaie dans quelques instants.");
+  } finally {
+    searchBtn.disabled = false;
+  }
+}
+
+function showError(msg) {
+  statusEl.textContent = msg;
+  statusEl.className = 'status error';
+}
+
+function getSurface(feature) {
+  const p = feature.properties || {};
+  const raw = p.contenance ?? p.contenance_m2 ?? p.surface ?? p.surface_parcelle;
+  const n = parseFloat(raw);
+  return isNaN(n) ? null : n;
+}
+
+// Interroge l'API Carto Cadastre de l'IGN pour une commune, avec pagination,
+// et tente plusieurs formats de paramètres car la doc publique est peu stable.
+async function fetchAllParcelles(codeInsee) {
+  const base = 'https://apicarto.ign.fr/api/cadastre/parcelle';
+  const limit = 500;
+  let start = 0;
+  let all = [];
+  let paramStyle = null; // 'code_insee' ou 'code_dep_com'
+
+  const codeDep = codeInsee.length === 5 ? codeInsee.substring(0, 2) : codeInsee.substring(0, 3);
+  const codeCom = codeInsee.length === 5 ? codeInsee.substring(2) : codeInsee.substring(3);
+
+  async function tryFetch(style, start) {
+    let url;
+    if (style === 'code_insee') {
+      url = `${base}?code_insee=${codeInsee}&_limit=${limit}&_start=${start}`;
+    } else {
+      url = `${base}?code_dep=${codeDep}&code_com=${codeCom}&_limit=${limit}&_start=${start}`;
+    }
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // détermine quel style de paramètre fonctionne, une seule fois
+  if (!paramStyle) {
+    try {
+      const test = await tryFetch('code_insee', 0);
+      if (test && test.features) { paramStyle = 'code_insee'; all = all.concat(test.features); start = limit; }
+    } catch (e) { /* on tentera l'autre style ci-dessous */ }
+  }
+  if (!paramStyle) {
+    try {
+      const test = await tryFetch('code_dep_com', 0);
+      if (test && test.features) { paramStyle = 'code_dep_com'; all = all.concat(test.features); start = limit; }
+    } catch (e) {
+      throw new Error("le service cadastre n'a pas répondu au format attendu");
+    }
+  }
+  if (!paramStyle) throw new Error('aucune parcelle retournée par le service');
+
+  // pagine jusqu'à épuisement (plafond de sécurité à 8000 parcelles)
+  while (start < 8000) {
+    let page;
+    try {
+      page = await tryFetch(paramStyle, start);
+    } catch (e) { break; }
+    if (!page || !page.features || page.features.length === 0) break;
+    all = all.concat(page.features);
+    if (page.features.length < limit) break;
+    start += limit;
+  }
+
+  return all;
+}
+
+function centroidOf(feature) {
+  try {
+    const geom = feature.geometry;
+    let coords;
+    if (geom.type === 'Polygon') coords = geom.coordinates[0];
+    else if (geom.type === 'MultiPolygon') coords = geom.coordinates[0][0];
+    else return null;
+    let lon = 0, lat = 0;
+    coords.forEach(c => { lon += c[0]; lat += c[1]; });
+    lon /= coords.length; lat /= coords.length;
+    return { lon, lat };
+  } catch (e) { return null; }
+}
+
+function renderResults(matches, targetSurface) {
+  resultsEl.innerHTML = '';
+  if (matches.length === 0) {
+    resultsEl.innerHTML = '<div class="card"><div class="empty">Aucune parcelle trouvée dans cette fourchette. Essaie d\'élargir la tolérance.</div></div>';
+    return;
+  }
+  matches.slice(0, 40).forEach(f => {
+    const p = f.properties || {};
+    const surface = getSurface(f);
+    const c = centroidOf(f);
+    const div = document.createElement('div');
+    div.className = 'result-item';
+
+    let linksHtml = '';
+    if (c) {
+      const geoportailUrl = `https://www.geoportail.gouv.fr/carte?c=${c.lon},${c.lat}&z=19&l0=CADASTRALPARCELS.PARCELS::GEOPORTAIL:OGC:WMTS(1)&l1=ORTHOIMAGERY.ORTHOPHOTOS::GEOPORTAIL:OGC:WMTS(1)`;
+      const gmapsUrl = `https://www.google.com/maps?q=${c.lat},${c.lon}`;
+      linksHtml = `<div class="links">
+        <a href="${geoportailUrl}" target="_blank" rel="noopener">Voir sur Géoportail</a>
+        <a href="${gmapsUrl}" target="_blank" rel="noopener">Voir sur Google Maps</a>
+      </div>`;
+    } else {
+      linksHtml = `<div class="links"><span class="badge">Localisation précise indisponible pour cette parcelle</span></div>`;
+    }
+
+    const idu = `Section ${p.section || '?'} n°${p.numero || '?'}`;
+    const diff = surface ? Math.round(Math.abs(surface - targetSurface)) : '?';
+
+    div.innerHTML = `
+      <div class="main">
+        <span class="idu">${idu}</span>
+        <span class="surface">${surface ? surface + ' m²' : '—'}</span>
+      </div>
+      <div class="meta">Écart avec la surface indiquée : ${diff} m² · Feuille ${p.feuille || '?'}</div>
+      ${linksHtml}
+    `;
+    resultsEl.appendChild(div);
+  });
+
+  if (matches.length > 40) {
+    const more = document.createElement('div');
+    more.className = 'status';
+    more.textContent = `+ ${matches.length - 40} autres résultats non affichés — réduis la tolérance pour affiner.`;
+    resultsEl.appendChild(more);
+  }
+}
+</script>
+</body>
+</html>
