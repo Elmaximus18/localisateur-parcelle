@@ -417,14 +417,10 @@ async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse, ge
       if (diff > 10) return false;
     }
 
-    if (typeBien) {
-      const tb = normalize(getField(r, 'type_batiment', 'Type_batiment'));
-      if (tb) {
-        if (typeBien === 'maison' && !tb.includes('maison')) return false;
-        if ((typeBien === 'appartement' || typeBien === 'studio' || typeBien === 'immeuble') && !tb.includes('appartement')) return false;
-      }
-      // si le champ type_batiment est absent de la ligne, on ne filtre pas dessus (donnée manquante ≠ non-correspondance)
-    }
+    // NB : type_batiment n'est volontairement PAS un filtre d'exclusion ici — les valeurs exactes
+    // de cet enum (ADEME) n'ont pas pu être vérifiées en direct depuis cet environnement. Un mauvais
+    // str-match exclurait à tort tous les résultats d'une commune. Il sert seulement de signal de tri
+    // (voir calcul de "typeMatch" au regroupement, utilisé comme boost au rendu).
 
     if (nbPieces) {
       const pieces = getField(r, 'nombre_pieces_principales', 'nombre_piece_principale', 'nombre_niveau_logement');
@@ -457,7 +453,16 @@ async function searchDPE(commune, surfaceHab, tolPct, anneeConstr, dpeClasse, ge
     const classes = g.rows.map(r => getField(r, 'etiquette_dpe', 'Etiquette_DPE')).filter(Boolean);
     const gesClasses = g.rows.map(r => getField(r, 'etiquette_ges', 'Etiquette_GES')).filter(Boolean);
     const pieces = g.rows.map(r => parseInt(getField(r, 'nombre_pieces_principales', 'nombre_piece_principale', 'nombre_niveau_logement'))).filter(n => !isNaN(n));
-    return { ...g, count: g.rows.length, avgSurface, annee: anneeMode, classes: [...new Set(classes)], gesClasses: [...new Set(gesClasses)], pieces: pieces.length ? pieces : null };
+    let typeMatch = false;
+    if (typeBien) {
+      const wantAppart = (typeBien === 'appartement' || typeBien === 'studio' || typeBien === 'immeuble');
+      typeMatch = g.rows.some(r => {
+        const tb = normalize(getField(r, 'type_batiment', 'Type_batiment'));
+        if (!tb) return false;
+        return typeBien === 'maison' ? tb.includes('maison') : (wantAppart && tb.includes('appartement'));
+      });
+    }
+    return { ...g, count: g.rows.length, avgSurface, annee: anneeMode, classes: [...new Set(classes)], gesClasses: [...new Set(gesClasses)], pieces: pieces.length ? pieces : null, typeMatch };
   });
 
   groups.sort((a, b) => (a.avgSurface !== null ? Math.abs(a.avgSurface - surfaceHab) : 1e9) - (b.avgSurface !== null ? Math.abs(b.avgSurface - surfaceHab) : 1e9));
@@ -502,6 +507,7 @@ async function renderDpeResults(result, targetSurface, nbLots, nbPieces) {
     let score = 0;
     if (nbLots && g.count === nbLots) score -= 1000;
     if (nbPieces && g.pieces && g.pieces.some(p => Math.abs(p - nbPieces) <= 1)) score -= 500;
+    if (g.typeMatch) score -= 100;
     return { g, score };
   });
   scored.sort((a, b) => a.score - b.score);
